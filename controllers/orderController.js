@@ -1,5 +1,6 @@
 const ApiError = require('../error/ApiError');
-const { OrderDetail, Order, Product } = require('../models/models');
+const { OrderDetail, Order, Product, Basket, Basket_item } = require('../models/models');
+
 
 class OrderController {
   async changeStatus(req, res, next) {
@@ -28,9 +29,18 @@ class OrderController {
 
   }
   async create(req, res, next) {
-    let { userId, sellerId, orderDetails } = req.body
+    let { userId, sellerId } = req.body
 
-    if (!userId || !sellerId || !orderDetails) { return res.status(404).json({ message: 'invalid data' }) }
+    if (!userId || !sellerId) { return res.status(404).json({ message: 'invalid data' }) }
+
+
+    const basket = await Basket.findOne( { userId } );
+    if (!basket) {
+      throw new Error('Корзина не найдена для данного пользователя');
+  }
+
+    let orderDetails = await Basket_item.findAll({ where: {basketId:basket.id}})
+
 
     try {
       const productIds = orderDetails.map(detail => detail.productId);
