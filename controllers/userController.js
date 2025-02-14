@@ -46,8 +46,30 @@ class UserController {
   }
 
   async check(req, res, next) {
-    const token = generateJwt(req.user.id, req.user.username, req.user.email);
-    return res.json({ token });
+    try {
+      // Предполагаем, что данные пользователя уже добавлены в req.user middleware
+      const userId = req.user.id;
+  
+      // Запрашиваем данные пользователя из базы данных
+      const user = await User.findOne({
+        where: { id: userId },
+        attributes: ['id', 'username', 'email',], // Указываем, какие поля мы хотим вернуть
+      });
+  
+      // Проверяем, найден ли пользователь
+      if (!user) {
+        return res.status(404).json({ message: 'Пользователь не найден' });
+      }
+  
+      // Возвращаем данные пользователя
+      
+      const token = generateJwt(user.id, user.username, user.email);
+      return res.json({ user, token });
+
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ message: 'Ошибка сервера' });
+    }
   }
 }
 

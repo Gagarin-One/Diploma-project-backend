@@ -32,12 +32,12 @@ class OrderController {
     let { userId, sellerId } = req.body
 
     if (!userId || !sellerId) { return res.status(404).json({ message: 'invalid data' }) }
-
-
-    const basket = await Basket.findOne( { userId } );
+    const basket = await Basket.findOne( {userId} );
     if (!basket) {
       throw new Error('Корзина не найдена для данного пользователя');
   }
+
+
 
     let orderDetails = await Basket_item.findAll({ where: {basketId:basket.id}})
 
