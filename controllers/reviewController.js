@@ -1,12 +1,12 @@
 const ApiError = require('../error/ApiError');
-const { Order, ReviewForSeller } = require('../models/models');
+const { Order, ReviewForSeller, User } = require('../models/models');
 
 class ReviewController {
   async create(req, res, next) {
     try {
-      let { userId, sellerId, review, rating } = req.body;
+      let { userId, sellerId, review, rating, orderId } = req.body;
 
-      if (!userId || !sellerId || !review || !rating) {
+      if (!userId || !sellerId || !review || !rating || !orderId) {
         return next(ApiError.badRequest('Некорректные данные'));
       }
 
@@ -26,7 +26,7 @@ class ReviewController {
           rating: rating,
           userId: userId,
           sellerId: sellerId,
-          orderId: order.id,
+          orderId: orderId,
         });
 
         return res.json(newReview);
@@ -40,15 +40,29 @@ class ReviewController {
   }
   async getAll(req, res, next) {
     try {
-      let { id } = req.params;
+      const { id } = req.params;
+  
       if (!id) {
         return next(ApiError.badRequest('Некорректные данные'));
       }
-      const reviews = await ReviewForSeller.findAll({ where: { sellerId: id } });
+  
+      // Включаем также информацию о пользователе (например, имя)
+      const reviews = await ReviewForSeller.findAll({ 
+        where: { sellerId: id },
+        
+        include: [
+          {
+            model: User,
+            as: 'user',
+            attributes: ['id', 'username'] // вернем поле с именем пользователя
+          }
+        ],
+      });
+  
       return res.json(reviews);
     } catch (error) {
       console.error(error);
-      return next(ApiError.badRequest(error.message))
+      return next(ApiError.badRequest(error.message));
     }
   }
 }

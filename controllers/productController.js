@@ -4,16 +4,19 @@ const { Product, Seller, Category } = require('../models/models')
 const ApiError = require('../error/ApiError');
 const { Op, Sequelize } = require('sequelize');
 const Fuse = require('fuse.js');
+
 class ProductController {
     async create(req, res, next) {
         try {
-            const { name, description, price, categoryId, sellerId } = req.body;
+            const { name, description, price, categoryId, sellerId, measure } = req.body;
+
             console.log('BODY:', req.body);
             console.log('FILES:', req.files);
-            console.log('name:', name, '| typeof:', typeof name);
+
             if (!name || !description || !price || !categoryId || !sellerId) {
-                return next(ApiError.badRequest('Все поля (name, description, price, categoryId, sellerId) обязательны'));
+                return next(ApiError.badRequest('Все поля (name, description, price, categoryId, sellerId) обязательные'));
             }
+
 
             if (!req.files || !req.files.img) {
                 return next(ApiError.badRequest('Файл изображения не загружен'));
@@ -21,37 +24,92 @@ class ProductController {
 
             const { img } = req.files;
 
-            // Генерация уникального имени файла и сохранение в static/
+            // Генерация уникального названия файла и сохраннение в static/
             const fileName = uuid.v4() + path.extname(img.name);
             const imagePath = path.resolve(__dirname, '..', 'static', fileName);
-            await img.mv(imagePath); // Сохраняем файл
+            await img.mv(imagePath);
 
-            console.log('Parsed:', {
+            console.log('Parsed!', {
                 name,
                 description,
                 price: Number(price),
                 categoryId: Number(categoryId),
                 sellerId: Number(sellerId),
+                measure
             });
-            console.log('Creating product...');
-            // Сохраняем ссылку на файл в БД (можно потом использовать, например: `/static/${fileName}`)
+
+            // Сохраниаем ссылку на файл в БД
             const baseUrl = `${req.protocol}://${req.get('host')}`;
             const imageUrl = `${baseUrl}/${fileName}`;
 
-            const product = await Product.create({
+            const product = await Product.create({ 
                 name,
                 description,
                 price: Number(price),
                 categoryId: Number(categoryId),
                 sellerId: Number(sellerId),
-                img_url: imageUrl, // Сохраняем полный URL
+                img_url: imageUrl,
+                measure: measure ?? '' // по умолчанию — пустая строка
             });
-            console.log('Product created:', product);
 
-            return res.status(201).json(product);
+            res.status(201).json(product);
         } catch (e) {
-            console.error('Error in create product:', e);
-            next(ApiError.badRequest(e.message));
+            console.error('Error in create product!', e);
+            next(ApiError.badRequest(e.message)); 
+        }
+    }
+
+    async update(req, res, next) {
+        try {
+            const { id } = req.params;
+
+            if (!id) {
+                return next(ApiError.badRequest('Не найден id товара'));
+            }
+
+            // На всякий случай найдем старый продукт
+            const product = await Product.findOne({ where: { id } });
+            if (!product) {
+                return next(ApiError.badRequest('Товар с таким id не найден'));
+            }
+
+            // Получаем данные из тела запроса
+            const { name, description, price, categoryId, measure } = req.body;
+
+            if (!name && !description && !price && !categoryId && !req.files && !measure) {
+                return next(ApiError.badRequest('Нет данных для изменения'));
+            }
+
+            // Если загружают картинку — сохраниваем по примеру с create
+            let imagePath = product.img_url;
+
+            if (req.files && req.files.img) {
+                const { img } = req.files;
+
+                // генератор уникального названия файла
+                const fileName = uuid.v4() + path.extname(img.name);
+                imagePath = path.resolve(__dirname, '..', 'static', fileName);
+                await img.mv(imagePath);
+
+                // генератор полного URL картинки
+                const baseUrl = `${req.protocol}://${req.get('host')}`;
+                imagePath = `${baseUrl}/${fileName}`;
+            }
+
+            // Обновляем свойства
+            product.name = name ?? product.name;
+            product.description = description ?? product.description;
+            product.price = price ? Number(price) : product.price;
+            product.categoryId = categoryId ? Number(categoryId) : product.categoryId;
+            product.measure = measure ?? product.measure;
+            product.img_url = imagePath;
+
+            await product.save();
+
+            res.json(product);
+        } catch (error) {
+            console.error(error);
+            return next(ApiError.badRequest(error.message)); 
         }
     }
 
@@ -60,7 +118,6 @@ class ProductController {
         page = page || 1;
         limit = limit || 9;
         let offset = (page - 1) * limit;
-        let products;
 
         const whereClause = {};
         if (categoryId) {
@@ -70,8 +127,7 @@ class ProductController {
             whereClause.sellerId = sellerId;
         }
 
-
-        products = await Product.findAndCountAll({
+        const products = await Product.findAndCountAll({ 
             where: whereClause,
             limit: Number(limit),
             offset: Number(offset),
@@ -80,72 +136,74 @@ class ProductController {
                 model: Seller,
                 as: 'seller',
                 attributes: ['username']
-            }]
+            }] 
         });
 
         const baseUrl = `${req.protocol}://${req.get('host')}`;
+
         const formattedProducts = products.rows.map(product => ({
             id: product.id,
             name: product.name,
             description: product.description,
             price: product.price,
-            img_url: `${baseUrl}/${product.img_url.replace(/^.*[\\/]/, '')}`, // нормализуем
+            img_url: `${baseUrl}/${product.img_url.replace(/^.*[\\/]/, '')}`,
             sellerName: product.seller.username,
             sellerId: product.sellerId,
-            categoryId: product.categoryId
+            categoryId: product.categoryId,
+            measure: product.measure // поле с мерой
         }));
 
         // Если строка поиска передана
         if (searchString && searchString.trim()) {
-            // Создаем объект Fuse.js с данными о товарах
+            // Используем Fuse.js с полем name
             const fuse = new Fuse(formattedProducts, {
-                keys: ['name'],  // Поле, по которому будет выполняться поиск
-                threshold: 0.3,   // Порог сходства, ниже которого совпадения не будут отображаться
-                includeScore: true,  // Включаем показатель сходства
+                keys: ['name'],  
+                threshold: 0.3,   
+                includeScore: true,
             });
 
-            // Фильтруем товары с помощью Fuse.js
+            // Фильтрация с помощью Fuse.js
             const searchResults = fuse.search(searchString.trim());
 
-            // Получаем только отфильтрованные товары
+            // Получаем только объекты с результата
             const filteredProducts = searchResults.map(result => result.item);
 
-            return res.json({
-                count: filteredProducts.length,
-                rows: filteredProducts
-            });
+            return res.json({ count: filteredProducts.length, rows: filteredProducts });
         }
 
-        return res.json({
-            count: products.count,
-            rows: formattedProducts
-        });
+        return res.json({ count: products.count, rows: formattedProducts });
     }
 
+    async getOne(req, res, next) {
+        const { id } = req.params;
 
-    async getOne(req, res) {
-        const { id } = req.params
         if (!id) {
             return next(ApiError.badRequest('Некорректные данные'));
         }
+
         try {
-            const product = await Product.findOne(
-                {
-                    where: { id },
-                    include: [{
-                        model: Seller,
+            const product = await Product.findOne({ 
+                where: { id },
+                include: [
+                    { 
+                        model: Seller, 
                         as: 'seller',
-                        attributes: ['username']
+                        attributes: ['username'] 
                     },
-                    {
-                        model: Category,
+                    { 
+                        model: Category, 
                         as: 'category',
-                        attributes: ['name']
+                        attributes: ['name'] 
                     },
-                    ]
-                },
-            )
+                ],
+            });
+
+            if (!product) {
+                return res.status(404).json({ message: 'Товар не найден' });
+            }
+
             const baseUrl = `${req.protocol}://${req.get('host')}`;
+
             const response = {
                 id: product.id,
                 productName: product.name,
@@ -153,15 +211,17 @@ class ProductController {
                 price: product.price,
                 img: `${baseUrl}/${product.img_url.replace(/^.*[\\/]/, '')}`,
                 sellerName: product.seller.username,
-                category: product.category.name
+                category: product.category.name,
+                measure: product.measure, // поле с мерой
+                sellerId:product.sellerId
             };
 
-            return res.json(response)
-
+            return res.json(response);
         } catch (error) {
-            next(ApiError.badRequest(error.message));
+            console.error(error);
+            next(ApiError.badRequest(error.message)); 
         }
     }
 }
 
-module.exports = new ProductController()
+module.exports = new ProductController();

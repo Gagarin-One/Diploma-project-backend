@@ -1,5 +1,5 @@
 const ApiError = require('../error/ApiError');
-const { OrderDetail, Order, Product, Basket, Basket_item } = require('../models/models');
+const { OrderDetail, Order, Product, Basket, Basket_item, Notification } = require('../models/models');
 
 
 class OrderController {
@@ -30,52 +30,52 @@ class OrderController {
   }
   async create(req, res, next) {
     const { userId, address, delivery_date } = req.body;
-  
+
     if (!userId || !address || !delivery_date) {
       return res.status(400).json({ message: 'userId, address и delivery_date обязательны' });
     }
-  
+
     try {
       const basket = await Basket.findOne({ where: { userId } });
-  
+
       if (!basket) {
         return res.status(404).json({ message: 'Корзина не найдена для данного пользователя' });
       }
-  
+
       const basketItems = await Basket_item.findAll({ where: { basketId: basket.id } });
-  
+
       if (basketItems.length === 0) {
         return res.status(400).json({ message: 'Корзина пуста' });
       }
-  
+
       const productIds = basketItems.map(item => item.productId);
       const products = await Product.findAll({ where: { id: productIds } });
-  
+
       const sellerGroups = {};
-  
+
       basketItems.forEach(item => {
         const product = products.find(p => p.id === item.productId);
         if (!product) return;
-  
+
         const sellerId = product.sellerId;
         if (!sellerGroups[sellerId]) {
           sellerGroups[sellerId] = [];
         }
-  
+
         sellerGroups[sellerId].push({
           productId: item.productId,
           quantity: item.quantity,
           price: product.price
         });
       });
-  
+
       const createdOrders = [];
-  
+
       for (const sellerId in sellerGroups) {
         const sellerItems = sellerGroups[sellerId];
-  
+
         const total_price = sellerItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  
+
         const newOrder = await Order.create({
           userId,
           sellerId,
@@ -84,7 +84,7 @@ class OrderController {
           address,
           delivery_date
         });
-  
+
         const detailPromises = sellerItems.map(item =>
           OrderDetail.create({
             orderId: newOrder.id,
@@ -92,20 +92,63 @@ class OrderController {
             quantity: item.quantity
           })
         );
-  
+
         await Promise.all(detailPromises);
         createdOrders.push(newOrder);
+        console.log(newOrder[0])
+        await Notification.create({
+
+          sellerId: newOrder.sellerId,
+          message: `Новый заказ #${newOrder.id} на сумму ${newOrder.total_price}`,
+          isRead: false,
+        });
+
       }
-  
+
       await Basket_item.destroy({ where: { basketId: basket.id } });
-  
+
+
+
+
       return res.json({ orders: createdOrders });
-  
+
     } catch (error) {
       return next(ApiError.badRequest(error.message));
     }
   }
-  
+  async getNotifications(req, res, next) {
+    try {
+      let { id } = req.params;
+      const sellerId = id
+
+      const notifications = await Notification.findAll({
+        where: { sellerId },
+        order: [['createdAt', 'DESC']],
+      });
+
+      res.json(notifications);
+    } catch (e) {
+      next(ApiError.badRequest(e.message));
+    }
+  }
+
+  // Очистить (отметить как прочитанные или удалить)
+  async clearNotifications(req, res, next) {
+    try {
+    
+      let { id } = req.params;
+      const sellerId = id
+      // Вариант 1: удалить
+      await Notification.destroy({ where: { sellerId } });
+
+      // Вариант 2: отметить как прочитанные
+      // await Notification.update({ isRead: true }, { where: { farmerId } });
+
+      res.json({ message: 'Уведомления очищены' });
+    } catch (e) {
+      next(ApiError.badRequest(e.message));
+    }
+  }
 
 
   async findForUser(req, res, next) {
@@ -125,7 +168,7 @@ class OrderController {
             as: 'product'
           }]
         }]
-        
+
       });
       // Проверка, найдены ли заказы
       if (!userOrders.length) {

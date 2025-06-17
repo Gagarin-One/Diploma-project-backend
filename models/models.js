@@ -50,6 +50,11 @@ const Product = sequelize.define('product', {
   description: { type: DataTypes.STRING, allowNull: false },
   price: { type: DataTypes.INTEGER, allowNull: false },
   img_url: { type: DataTypes.STRING, allowNull: false },
+  measure: { 
+    type: DataTypes.STRING,
+    allowNull: false,
+    defaultValue: '' // по умолчанию — пустая строка
+  }
 });
 
 const Category = sequelize.define('category', {
@@ -66,7 +71,7 @@ const Order = sequelize.define('order', {
     allowNull: false,
     validate: {
       isIn: {
-        args: [['pending', 'in processing','completed','dismissed']],
+        args: [['pending', 'in processing', 'completed', 'dismissed']],
         msg: "Status must be one of: 'pending', 'in processing', 'completed', 'dismissed'"
       }
     }
@@ -90,6 +95,11 @@ const OrderDetail = sequelize.define('order_detail', {
   }
 })
 
+const Notification = sequelize.define('Notification', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  message: { type: DataTypes.STRING, allowNull: false },
+  isRead: { type: DataTypes.BOOLEAN, defaultValue: false },
+});
 
 
 Seller.hasMany(Product);
@@ -128,6 +138,9 @@ OrderDetail.belongsTo(Product);
 Order.hasOne(ReviewForSeller);
 ReviewForSeller.belongsTo(Order);
 
+Notification.belongsTo(Seller);
+Seller.hasMany(Notification);
+
 module.exports = {
   User,
   Seller,
@@ -137,5 +150,6 @@ module.exports = {
   Product,
   ReviewForSeller,
   Order,
-  OrderDetail
+  OrderDetail,
+  Notification
 };
