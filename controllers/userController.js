@@ -64,7 +64,7 @@ class UserController {
       // Возвращаем данные пользователя
       
       const token = generateJwt(user.id, user.username, user.email);
-      return res.json({ user, token });
+      return res.json({ token });
 
     } catch (error) {
       console.error(error);

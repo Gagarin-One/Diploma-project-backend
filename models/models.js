@@ -14,7 +14,7 @@ const Seller = sequelize.define('seller', {
   username: { type: DataTypes.STRING, allowNull: false },
   email: { type: DataTypes.STRING, unique: true },
   password: { type: DataTypes.STRING },
-  address:{ type: DataTypes.STRING, allowNull: false }
+  address: { type: DataTypes.STRING, allowNull: false }
 });
 
 const Basket = sequelize.define('basket', {
@@ -25,15 +25,15 @@ const Basket_item = sequelize.define('basket_item', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   quantity: {
     type: DataTypes.INTEGER,
-    allowNull: false, 
-    defaultValue: 1, 
+    allowNull: false,
+    defaultValue: 1,
   }
 });
 
 const ReviewForSeller = sequelize.define('review', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   review_text: { type: DataTypes.STRING, allowNull: false },
-  rating: { 
+  rating: {
     type: DataTypes.INTEGER,
     allowNull: false,
     validate: {
@@ -46,7 +46,7 @@ const ReviewForSeller = sequelize.define('review', {
 
 const Product = sequelize.define('product', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-  name: { type: DataTypes.STRING, allowNull: false },
+  name: { type: DataTypes.STRING, allowNull: false, collate: 'und-ci' },
   description: { type: DataTypes.STRING, allowNull: false },
   price: { type: DataTypes.INTEGER, allowNull: false },
   img_url: { type: DataTypes.STRING, allowNull: false },
@@ -61,15 +61,23 @@ const Category = sequelize.define('category', {
 const Order = sequelize.define('order', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   total_price: { type: DataTypes.INTEGER, allowNull: false },
-  status: { 
-    type: DataTypes.STRING, 
+  status: {
+    type: DataTypes.STRING,
     allowNull: false,
     validate: {
       isIn: {
-        args: [['pending', 'ready_for_pickup']],
-        msg: "Status must be either 'pending', 'ready_for_pickup'"
+        args: [['pending', 'in processing','completed','dismissed']],
+        msg: "Status must be one of: 'pending', 'in processing', 'completed', 'dismissed'"
       }
     }
+  },
+  address: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  delivery_date: {
+    type: DataTypes.DATE,
+    allowNull: false,
   }
 });
 
@@ -77,8 +85,8 @@ const OrderDetail = sequelize.define('order_detail', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   quantity: {
     type: DataTypes.INTEGER,
-    allowNull: false, 
-    defaultValue: 1, 
+    allowNull: false,
+    defaultValue: 1,
   }
 })
 
@@ -117,7 +125,7 @@ OrderDetail.belongsTo(Order);
 Product.hasMany(OrderDetail)
 OrderDetail.belongsTo(Product);
 
-Order.hasOne(ReviewForSeller); 
+Order.hasOne(ReviewForSeller);
 ReviewForSeller.belongsTo(Order);
 
 module.exports = {

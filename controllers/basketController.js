@@ -68,6 +68,43 @@ class BasketController {
       return next(ApiError.badRequest(error.message));
     }
   }
+  async updateQuantity(req, res, next) {
+    const { userId, productId, quantity } = req.body;
+  
+    if (!userId || !productId || quantity === undefined) {
+      return next(ApiError.badRequest('Некорректные данные'));
+    }
+  
+    try {
+      // Находим корзину по userId
+      const basket = await Basket.findOne({ where: { userId } });
+  
+      if (!basket) {
+        return res.status(404).json({ message: 'Корзина не найдена' });
+      }
+  
+      // Находим нужный товар в корзине
+      const basketItem = await Basket_item.findOne({
+        where: { basketId: basket.id, productId }
+      });
+  
+      if (!basketItem) {
+        return res.status(404).json({ message: 'Товар в корзине не найден' });
+      }
+  
+      // Обновляем количество
+      basketItem.quantity = quantity;
+      await basketItem.save();
+  
+      return res.json({
+        productId: basketItem.productId,
+        quantity: basketItem.quantity
+      });
+    } catch (error) {
+      return next(ApiError.badRequest(error.message));
+    }
+  }
+  
 }
 
 module.exports = new BasketController();
